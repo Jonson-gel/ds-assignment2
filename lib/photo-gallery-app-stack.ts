@@ -34,6 +34,8 @@ export class PhotoGalleryStack extends cdk.Stack {
       retentionPeriod: cdk.Duration.days(14),
     });
 
+    const orderQueue = new sqs.Queue(this, "order-queue");
+
     // Lambda: Log Valid Images to DynamoDB
 
     const logImageFn = new lambdanode.NodejsFunction(this, "LogImageFunction", {
@@ -46,9 +48,20 @@ export class PhotoGalleryStack extends cdk.Stack {
       },
     });
 
+    const orderPublisherFn = new lambdanode.NodejsFunction(this, "orderPublisherFn", {
+      runtime: lambda.Runtime.NODEJS_22_X,
+      memorySize: 128,
+      timeout: cdk.Duration.seconds(5),
+      entry: `${__dirname}/../lambdas/orderPublisher.ts`,
+      environment: {
+        QUEUE_URL: orderQueue.queueUrl,
+      },
+    });
+
     // Grant access to S3 and DynamoDB
     photoBucket.grantRead(logImageFn);
     imageTable.grantWriteData(logImageFn);
+    orderQueue.grantSendMessages(orderPublisherFn);
 
     // Notify Lambda when a file is uploaded to the bucket
     photoBucket.addEventNotification(
