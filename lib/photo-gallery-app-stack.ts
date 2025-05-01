@@ -6,6 +6,8 @@ import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as lambdanode from "aws-cdk-lib/aws-lambda-nodejs";
 import * as s3n from "aws-cdk-lib/aws-s3-notifications";
 import { Construct } from "constructs";
+import * as sns from "aws-cdk-lib/aws-sns";
+import * as sns_subs from "aws-cdk-lib/aws-sns-subscriptions";
 
 export class PhotoGalleryStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -36,8 +38,10 @@ export class PhotoGalleryStack extends cdk.Stack {
 
     const orderQueue = new sqs.Queue(this, "order-queue");
 
-    // Lambda: Log Valid Images to DynamoDB
+    // Create SNS Topic
+    const imageUploadTopic = new sns.Topic(this, "ImageUploadTopic");
 
+    // Lambda: Log Valid Images to DynamoDB
     const logImageFn = new lambdanode.NodejsFunction(this, "LogImageFunction", {
       runtime: lambda.Runtime.NODEJS_18_X,
       memorySize: 128,
@@ -45,6 +49,7 @@ export class PhotoGalleryStack extends cdk.Stack {
       entry: `${__dirname}/../lambdas/log-image.ts`,
       environment: {
         TABLE_NAME: imageTable.tableName,
+        TOPIC_ARN: imageUploadTopic.topicArn,
       },
     });
 
@@ -58,10 +63,28 @@ export class PhotoGalleryStack extends cdk.Stack {
       },
     });
 
+    // Lambda: Process SNS Messages (for validating and deleting invalid images)
+    const processSNSMsgFn = new lambdanode.NodejsFunction(this, "ProcessSNSMsgFunction", {
+      runtime: lambda.Runtime.NODEJS_18_X,
+      memorySize: 128,
+      timeout: cdk.Duration.seconds(5),
+      entry: `${__dirname}/../lambdas/processSNSMsg.ts`,
+      environment: {
+        AWS_REGION: this.region,
+      },
+    });
+
+    imageUploadTopic.addSubscription(new sns_subs.LambdaSubscription(processSNSMsgFn));
+
     // Grant access to S3 and DynamoDB
     photoBucket.grantRead(logImageFn);
     imageTable.grantWriteData(logImageFn);
     orderQueue.grantSendMessages(orderPublisherFn);
+
+    // Subscribe Lambda to the Topic
+    imageUploadTopic.grantPublish(logImageFn);
+    photoBucket.grantReadWrite(processSNSMsgFn);
+
 
     // Notify Lambda when a file is uploaded to the bucket
     photoBucket.addEventNotification(
