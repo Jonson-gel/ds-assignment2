@@ -1,78 +1,74 @@
-import * as cdk from 'aws-cdk-lib';
-import { Construct } from 'constructs';
-import * as s3 from 'aws-cdk-lib/aws-s3';
-import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
-import * as sqs from 'aws-cdk-lib/aws-sqs';
-import * as sns from 'aws-cdk-lib/aws-sns';
-import * as subs from 'aws-cdk-lib/aws-sns-subscriptions';
-import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
+import * as cdk from "aws-cdk-lib";
+import * as s3 from "aws-cdk-lib/aws-s3";
+import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
+import * as sqs from "aws-cdk-lib/aws-sqs";
+import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as lambdanode from "aws-cdk-lib/aws-lambda-nodejs";
+import * as s3n from "aws-cdk-lib/aws-s3-notifications";
+import { Construct } from "constructs";
 
-export class PhotoGalleryAppStack extends cdk.Stack {
+export class PhotoGalleryStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    // S3 Bucket for image uploads
-    const imageBucket = new s3.Bucket(this, 'ImageUploadBucket', {
+    // S3 Bucket for Photo Uploads
+
+    const photoBucket = new s3.Bucket(this, "PhotoUploadBucket", {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
-      autoDeleteObjects: true
+      autoDeleteObjects: true,
     });
 
-    // DynamoDB table
-    const imageTable = new dynamodb.Table(this, 'ImageMetadataTable', {
-      partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+    // DynamoDB Table for Image Metadata
+
+    const imageTable = new dynamodb.Table(this, "ImageMetadataTable", {
+      partitionKey: {
+        name: "id",
+        type: dynamodb.AttributeType.STRING,
+      },
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
-    // SQS Queue and DLQ
-    const deadLetterQueue = new sqs.Queue(this, 'InvalidImageDLQ');
-    const imageQueue = new sqs.Queue(this, 'ImageProcessingQueue', {
-      deadLetterQueue: {
-        maxReceiveCount: 3,
-        queue: deadLetterQueue
-      }
+    // SQS Dead Letter Queue for Invalid Files
+
+    const deadLetterQueue = new sqs.Queue(this, "InvalidImageDLQ", {
+      retentionPeriod: cdk.Duration.days(14),
     });
 
-    // SNS Topic
-    const metadataTopic = new sns.Topic(this, 'ImageMetadataTopic');
+    // Lambda: Log Valid Images to DynamoDB
 
-    // Lambda functions
-    const logImageLambda = new lambda.Function(this, 'LogImageFunction', {
+    const logImageFn = new lambdanode.NodejsFunction(this, "LogImageFunction", {
       runtime: lambda.Runtime.NODEJS_18_X,
-      handler: 'index.handler',
-      code: lambda.Code.fromInline('exports.handler = async () => { console.log("Log image"); }'),
+      memorySize: 128,
+      timeout: cdk.Duration.seconds(5),
+      entry: `${__dirname}/../lambdas/log-image.ts`,
+      environment: {
+        TABLE_NAME: imageTable.tableName,
+      },
     });
 
-    const removeImageLambda = new lambda.Function(this, 'RemoveImageFunction', {
-      runtime: lambda.Runtime.NODEJS_18_X,
-      handler: 'index.handler',
-      code: lambda.Code.fromInline('exports.handler = async () => { console.log("Remove invalid image"); }'),
+    // Grant access to S3 and DynamoDB
+    photoBucket.grantRead(logImageFn);
+    imageTable.grantWriteData(logImageFn);
+
+    // Notify Lambda when a file is uploaded to the bucket
+    photoBucket.addEventNotification(
+      s3.EventType.OBJECT_CREATED,
+      new s3n.LambdaDestination(logImageFn)
+    );
+
+    // DLQ
+
+    // Output
+    new cdk.CfnOutput(this, "bucketName", {
+      value: photoBucket.bucketName,
     });
 
-    const addMetadataLambda = new lambda.Function(this, 'AddMetadataFunction', {
-      runtime: lambda.Runtime.NODEJS_18_X,
-      handler: 'index.handler',
-      code: lambda.Code.fromInline('exports.handler = async () => { console.log("Add metadata"); }'),
+    new cdk.CfnOutput(this, "tableName", {
+      value: imageTable.tableName,
     });
 
-    const updateStatusLambda = new lambda.Function(this, 'UpdateStatusFunction', {
-      runtime: lambda.Runtime.NODEJS_18_X,
-      handler: 'index.handler',
-      code: lambda.Code.fromInline('exports.handler = async () => { console.log("Update status"); }'),
+    new cdk.CfnOutput(this, "dlqName", {
+      value: deadLetterQueue.queueName,
     });
-
-    const mailerLambda = new lambda.Function(this, 'ConfirmationMailerFunction', {
-      runtime: lambda.Runtime.NODEJS_18_X,
-      handler: 'index.handler',
-      code: lambda.Code.fromInline('exports.handler = async () => { console.log("Send mail"); }'),
-    });
-
-    // Permissions
-    imageBucket.grantReadWrite(logImageLambda);
-    imageBucket.grantReadWrite(removeImageLambda);
-    imageTable.grantReadWriteData(logImageLambda);
-    imageTable.grantReadWriteData(addMetadataLambda);
-    imageTable.grantReadWriteData(updateStatusLambda);
   }
 }
