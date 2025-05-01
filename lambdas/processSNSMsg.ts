@@ -18,6 +18,19 @@ export const handler: SNSHandler = async (event: SNSEvent) => {
         Key: objectKey,
       });
 
+      if (!objectKey.endsWith(".jpeg") && !objectKey.endsWith(".jpg")) {
+        console.warn(`Invalid file extension: ${objectKey}`);
+      
+        // 删除无效文件
+        await s3.send(new DeleteObjectCommand({
+          Bucket: bucketName,
+          Key: objectKey,
+        }));
+      
+        console.log(`Deleted invalid file: ${objectKey}`);
+        return;
+      }      
+
       const headResult = await s3.send(headCmd);
       const contentType = headResult.ContentType || "";
 
