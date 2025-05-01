@@ -5,9 +5,11 @@ import {
     PutItemCommandInput,
 } from "@aws-sdk/client-dynamodb";
 import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
+import { DeleteObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 const client = new DynamoDBClient({ region: process.env.AWS_REGION });
 const sns = new SNSClient({ region: process.env.AWS_REGION });
+const s3 = new S3Client({ region: process.env.AWS_REGION });
 
 const VALID_EXTENSIONS = [".jpeg", ".png"];
 
@@ -21,13 +23,13 @@ export const handler: S3Handler = async (event) => {
             throw new Error(`Invalid file type: ${objectKey}`);
         }
 
-        // ✅ Publish to SNS
+        // Publish to SNS
         await sns.send(new PublishCommand({
             TopicArn: process.env.TOPIC_ARN,
             Message: JSON.stringify({ Records: [record] }),
         }));
 
-        // ✅ Log to DynamoDB
+        // Log to DynamoDB
         const input: PutItemCommandInput = {
             TableName: process.env.TABLE_NAME,
             Item: {

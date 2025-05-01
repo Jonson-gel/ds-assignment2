@@ -51,6 +51,7 @@ export class PhotoGalleryStack extends cdk.Stack {
         TABLE_NAME: imageTable.tableName,
         TOPIC_ARN: imageUploadTopic.topicArn,
       },
+      deadLetterQueue,
     });
 
     const orderPublisherFn = new lambdanode.NodejsFunction(this, "orderPublisherFn", {
@@ -70,7 +71,6 @@ export class PhotoGalleryStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(5),
       entry: `${__dirname}/../lambdas/processSNSMsg.ts`,
       environment: {
-        AWS_REGION: this.region,
       },
     });
 
