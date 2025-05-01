@@ -74,6 +74,17 @@ export class PhotoGalleryStack extends cdk.Stack {
       },
     });
 
+    // Lambda to consume DLQ and delete invalid images
+    const removeImageFn = new lambdanode.NodejsFunction(this, "RemoveImageFunction", {
+      runtime: lambda.Runtime.NODEJS_18_X,
+      memorySize: 128,
+      timeout: cdk.Duration.seconds(5),
+      entry: `${__dirname}/../lambdas/remove-image.ts`,
+      environment: {
+        BUCKET_NAME: photoBucket.bucketName,
+      },
+    });
+
     imageUploadTopic.addSubscription(new sns_subs.LambdaSubscription(processSNSMsgFn));
 
     // Grant access to S3 and DynamoDB
@@ -85,6 +96,8 @@ export class PhotoGalleryStack extends cdk.Stack {
     imageUploadTopic.grantPublish(logImageFn);
     photoBucket.grantReadWrite(processSNSMsgFn);
 
+    photoBucket.grantDelete(removeImageFn);
+    deadLetterQueue.grantConsumeMessages(removeImageFn);
 
     // Notify Lambda when a file is uploaded to the bucket
     photoBucket.addEventNotification(
@@ -93,6 +106,11 @@ export class PhotoGalleryStack extends cdk.Stack {
     );
 
     // DLQ
+    new lambda.EventSourceMapping(this, "DLQEventMapping", {
+      eventSourceArn: deadLetterQueue.queueArn,
+      target: removeImageFn,
+      batchSize: 1,
+    });
 
     // Output
     new cdk.CfnOutput(this, "bucketName", {
