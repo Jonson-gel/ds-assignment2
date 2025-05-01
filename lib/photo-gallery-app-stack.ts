@@ -85,6 +85,16 @@ export class PhotoGalleryStack extends cdk.Stack {
       },
     });
 
+    const addMetadataFn = new lambdanode.NodejsFunction(this, "AddMetadataFunction", {
+      runtime: lambda.Runtime.NODEJS_18_X,
+      memorySize: 128,
+      timeout: cdk.Duration.seconds(5),
+      entry: `${__dirname}/../lambdas/addMetadata.ts`,
+      environment: {
+        TABLE_NAME: imageTable.tableName,
+      },
+    });
+
     imageUploadTopic.addSubscription(new sns_subs.LambdaSubscription(processSNSMsgFn));
 
     // Grant access to S3 and DynamoDB
@@ -98,11 +108,22 @@ export class PhotoGalleryStack extends cdk.Stack {
 
     photoBucket.grantDelete(removeImageFn);
     deadLetterQueue.grantConsumeMessages(removeImageFn);
+    imageTable.grantWriteData(addMetadataFn);
 
     // Notify Lambda when a file is uploaded to the bucket
     photoBucket.addEventNotification(
       s3.EventType.OBJECT_CREATED,
       new s3n.LambdaDestination(logImageFn)
+    );
+
+    imageUploadTopic.addSubscription(
+      new sns_subs.LambdaSubscription(addMetadataFn, {
+        filterPolicy: {
+          metadata_type: sns.SubscriptionFilter.stringFilter({
+            allowlist: ['Caption', 'Date', 'name'],
+          }),
+        },
+      })
     );
 
     // DLQ
