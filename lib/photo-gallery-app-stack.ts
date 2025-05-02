@@ -100,7 +100,7 @@ export class PhotoGalleryStack extends cdk.Stack {
       runtime: lambda.Runtime.NODEJS_18_X,
       memorySize: 128,
       timeout: cdk.Duration.seconds(5),
-      entry: `${__dirname}/../lambdas/update-status.ts`,
+      entry: `${__dirname}/../lambdas/updateStatus.ts`,
       environment: {
         TABLE_NAME: imageTable.tableName,
       },
@@ -108,13 +108,7 @@ export class PhotoGalleryStack extends cdk.Stack {
 
     imageUploadTopic.addSubscription(new sns_subs.LambdaSubscription(processSNSMsgFn));
 
-    imageUploadTopic.addSubscription(new sns_subs.LambdaSubscription(updateStatusFn, {
-      filterPolicy: {
-        metadata_type: sns.SubscriptionFilter.stringFilter({
-          allowlist: [],
-        }),
-      },
-    }));
+    imageUploadTopic.addSubscription(new sns_subs.LambdaSubscription(updateStatusFn));
 
     // Grant access to S3 and DynamoDB
     photoBucket.grantRead(logImageFn);
