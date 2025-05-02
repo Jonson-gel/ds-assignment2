@@ -8,6 +8,8 @@ import * as s3n from "aws-cdk-lib/aws-s3-notifications";
 import { Construct } from "constructs";
 import * as sns from "aws-cdk-lib/aws-sns";
 import * as sns_subs from "aws-cdk-lib/aws-sns-subscriptions";
+import * as iam from "aws-cdk-lib/aws-iam";
+import * as sources from "aws-cdk-lib/aws-lambda-event-sources";
 
 export class PhotoGalleryStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -27,6 +29,7 @@ export class PhotoGalleryStack extends cdk.Stack {
         name: "id",
         type: dynamodb.AttributeType.STRING,
       },
+      stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
@@ -106,9 +109,36 @@ export class PhotoGalleryStack extends cdk.Stack {
       },
     });
 
+    const mailerFunction = new lambda.Function(this, 'ConfirmationMailerFunction', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'confirmationMailer.handler',
+      code: lambda.Code.fromAsset('lambdas'),
+      environment: {
+        SES_EMAIL_FROM: '20109317@mail.wit.ie',
+        SES_EMAIL_TO: '2904180191@qq.com',
+        SES_REGION: 'eu-west-1',
+      },
+      timeout: cdk.Duration.seconds(10),
+    });
+
     imageUploadTopic.addSubscription(new sns_subs.LambdaSubscription(processSNSMsgFn));
 
     imageUploadTopic.addSubscription(new sns_subs.LambdaSubscription(updateStatusFn));
+
+    mailerFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ['ses:SendEmail', 'ses:SendRawEmail'],
+        resources: ['*'],
+      })
+    );
+
+    mailerFunction.addEventSource(
+      new sources.DynamoEventSource(imageTable, {
+        startingPosition: lambda.StartingPosition.LATEST,
+        batchSize: 5,
+        retryAttempts: 2,
+      })
+    );
 
     // Grant access to S3 and DynamoDB
     photoBucket.grantRead(logImageFn);
