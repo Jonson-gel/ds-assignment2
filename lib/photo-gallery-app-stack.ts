@@ -95,7 +95,26 @@ export class PhotoGalleryStack extends cdk.Stack {
       },
     });
 
+    // Lambda: Update Status from Moderator Messages
+    const updateStatusFn = new lambdanode.NodejsFunction(this, "UpdateStatusFunction", {
+      runtime: lambda.Runtime.NODEJS_18_X,
+      memorySize: 128,
+      timeout: cdk.Duration.seconds(5),
+      entry: `${__dirname}/../lambdas/update-status.ts`,
+      environment: {
+        TABLE_NAME: imageTable.tableName,
+      },
+    });
+
     imageUploadTopic.addSubscription(new sns_subs.LambdaSubscription(processSNSMsgFn));
+
+    imageUploadTopic.addSubscription(new sns_subs.LambdaSubscription(updateStatusFn, {
+      filterPolicy: {
+        metadata_type: sns.SubscriptionFilter.stringFilter({
+          allowlist: [],
+        }),
+      },
+    }));
 
     // Grant access to S3 and DynamoDB
     photoBucket.grantRead(logImageFn);
@@ -109,6 +128,7 @@ export class PhotoGalleryStack extends cdk.Stack {
     photoBucket.grantDelete(removeImageFn);
     deadLetterQueue.grantConsumeMessages(removeImageFn);
     imageTable.grantWriteData(addMetadataFn);
+    imageTable.grantWriteData(updateStatusFn);
 
     // Notify Lambda when a file is uploaded to the bucket
     photoBucket.addEventNotification(

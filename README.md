@@ -14,3 +14,4 @@ The `cdk.json` file tells the CDK Toolkit how to execute your app.
 * `npx cdk synth`   emits the synthesized CloudFormation template
 
 PhotoGalleryAppStack.bucketName = photogalleryappstack-photouploadbucketf7cb9b85-rf81onmzk4bb
+"TopicArn": "arn:aws:sns:eu-west-1:412381760759:PhotoGalleryAppStack-ImageUploadTopic9FB98BEC-revrRmLAqRBH"
