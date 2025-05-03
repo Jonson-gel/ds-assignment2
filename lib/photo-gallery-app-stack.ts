@@ -109,16 +109,16 @@ export class PhotoGalleryStack extends cdk.Stack {
       },
     });
 
-    const mailerFunction = new lambda.Function(this, 'ConfirmationMailerFunction', {
-      runtime: lambda.Runtime.NODEJS_20_X,
-      handler: 'confirmationMailer.handler',
-      code: lambda.Code.fromAsset('lambdas'),
+    const mailerFunction = new lambdanode.NodejsFunction(this, 'ConfirmationMailerFunction', {
+      runtime: lambda.Runtime.NODEJS_18_X,
+      memorySize: 128,
+      timeout: cdk.Duration.seconds(5),
+      entry: `${__dirname}/../lambdas/confirmationMailer.ts`,
       environment: {
         SES_EMAIL_FROM: '20109317@mail.wit.ie',
         SES_EMAIL_TO: '2904180191@qq.com',
         SES_REGION: 'eu-west-1',
       },
-      timeout: cdk.Duration.seconds(10),
     });
 
     imageUploadTopic.addSubscription(new sns_subs.LambdaSubscription(processSNSMsgFn));

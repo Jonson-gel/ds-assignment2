@@ -26,8 +26,8 @@ export const handler: DynamoDBStreamHandler = async (event) => {
       const id = newImage.id?.S;
       const reason = newImage.reason?.S;
 
-      console.log(`📩 Status update: ${id} → ${newStatus}`);
-      console.log(`📄 Reason: ${reason}`);
+      console.log(`Status update: ${id} → ${newStatus}`);
+      console.log(`Reason: ${reason}`);
 
       const params = createEmailParams({
         name: "Photo Review System",
@@ -37,9 +37,9 @@ export const handler: DynamoDBStreamHandler = async (event) => {
 
       try {
         await sesClient.send(new SendEmailCommand(params));
-        console.log(`✅ Email sent to ${SES_EMAIL_TO}`);
+        console.log(`Email sent to ${SES_EMAIL_TO}`);
       } catch (error) {
-        console.error("❌ Failed to send email:", error);
+        console.error("Failed to send email:", error);
       }
     }
   }

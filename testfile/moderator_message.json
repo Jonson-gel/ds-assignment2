@@ -1,9 +1,8 @@
 {
-    "id": "image1.jpeg",
-    "date": "01/05/2025",
-    "update": {
-      "status": "Pass",
-      "reason": "Photo is clear and appropriate."
-    }
+  "id": "image1.jpeg",
+  "date": "01/05/2025",
+  "update": {
+    "status": "Pass",
+    "reason": "Photo is clear and appropriate."
   }
-  
+}
