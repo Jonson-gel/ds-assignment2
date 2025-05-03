@@ -121,10 +121,6 @@ export class PhotoGalleryStack extends cdk.Stack {
       },
     });
 
-    imageUploadTopic.addSubscription(new sns_subs.LambdaSubscription(processSNSMsgFn));
-
-    imageUploadTopic.addSubscription(new sns_subs.LambdaSubscription(updateStatusFn));
-
     mailerFunction.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ['ses:SendEmail', 'ses:SendRawEmail'],
@@ -160,11 +156,33 @@ export class PhotoGalleryStack extends cdk.Stack {
       new s3n.LambdaDestination(logImageFn)
     );
 
+    // Metadata
     imageUploadTopic.addSubscription(
       new sns_subs.LambdaSubscription(addMetadataFn, {
         filterPolicy: {
           metadata_type: sns.SubscriptionFilter.stringFilter({
             allowlist: ['Caption', 'Date', 'name'],
+          }),
+        },
+      })
+    );
+
+    // Moderator
+    imageUploadTopic.addSubscription(
+      new sns_subs.LambdaSubscription(updateStatusFn, {
+        filterPolicy: {
+          metadata_type: sns.SubscriptionFilter.stringFilter({
+            allowlist: ['moderator'],
+          }),
+        },
+      })
+    );
+
+    imageUploadTopic.addSubscription(
+      new sns_subs.LambdaSubscription(processSNSMsgFn, {
+        filterPolicy: {
+          metadata_type: sns.SubscriptionFilter.stringFilter({
+            allowlist: ['moderator'],
           }),
         },
       })
